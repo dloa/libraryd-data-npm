@@ -17,4 +17,5 @@ var LDD = require("libraryd-data");
 
 LDD.getArtifact("artifactHash");
 LDD.search("searchTerm");
+LDD.changeDataSource("127.0.0.1", false);
 ```
