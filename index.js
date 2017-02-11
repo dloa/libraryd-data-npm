@@ -14,6 +14,13 @@ var LDD = function () {
 	this.dataHostnameSecure = true;
 	this.dataSlug = "/alexandria/v2/"
 
+	// SEARCH_DELAY is the amount of time required between full loads from LibraryD.
+	this.SEARCH_DELAY = 30 * 60 * 1000; 
+	this.MAX_SEARCH_RESULTS = 50;
+
+	// Time since the last full query from LibraryD
+	this.lastFullUpdate = 0;
+
 	// Method Name: buildURL
 	// Description: A helper method to build the URL string using private variables.
 	// Paramaters: None
@@ -32,32 +39,79 @@ var LDD = function () {
 // Returns: Returns data via the callback function.
 LDD.prototype.getArtifact = function(artifactTXID, callback){
 	// Go through entire artifact storage backwards (doing it backwards will allow the searching through the most recent artifacts first.)
-	for (var i = this.artifactStorage.length - 1; i >= 0; i--) 
-		if (typeof this.artifactStorage[i].txid !== 'undefined')
-			if (this.artifactStorage[i].txid == artifactTXID)
-				callback([this.artifactStorage[i]]);
+	for (var i = this.artifactStorage.length - 1; i >= 0; i--) {
+		if (typeof this.artifactStorage[i].txid !== 'undefined') {
+			if (this.artifactStorage[i].txid == artifactTXID){
+				if (typeof callback !== 'function'){
+					return [this.artifactStorage[i]];
+				} else {
+					callback([this.artifactStorage[i]]);
+					return;
+				}
+			}
+		}
+	}
+
+	// Make sure the callback exists.
+	if (typeof callback !== 'function'){
+		// There is no callback so abort before attempting to query LibraryD.
+		console.log("No callback, aborting getArtifact before querying LibraryD!");
+		return [];
+	}
 
 	// Since we got here no artifact was found. Lets get it from LibraryD.
 	this.queryLibraryD(artifactTXID, 'txid', callback);
 }
 
 // Method Name: LDD.search
-// Description: Searches through all stored artifact JSON, if an exact match is not found (or the term returns more than 3 artifacts) it will query LibraryD to make sure it accessed all matches. Data retrieved from LibraryD will always be stored.
+// Description: Searches through all stored artifact JSON, if the last full query of LibraryD was more than SEARCH_DELAY minutes ago then do another full query.
 // Paramaters: 
-// 		- searchTerm: the term you wish to search for.
+// 		- searchTerm: The text we are searching for.
+// 		- searchOn: the variable name (txid, publisher, address, etc) or for everything '*' (default '*')
+// 		- module: the module we are searching on, this should be 'media' in almost all cases. It is however an option if wished to be set. (default 'media')
+// 		- callback: function that will be called once the search finishes.
 // Returns: Artifacts in a JSON object array.
-LDD.prototype.search = function(searchTerm, searchOn, module){
-	for (var i = this.artifactStorage.length - 1; i >= 0; i--) {
-		// Check if the type is oip or alexandria-media.
-		if (typeof this.artifactStorage[i]["oip-041"] !== 'undefined'){
-			// Artifact is oip-041
+LDD.prototype.search = function(searchTerm, searchOn, module, callback){
+	// Make sure paramaters are set and are strings. If they are not set, or if they are not a string, then they will be set to default.
+	if (typeof searchOn !== 'string'){
+		// Since it is not a string, check if they put the callback here.
+		if (typeof searchOn === 'function')
+			callback = searchOn;
 
-		} else if (typeof this.artifactStorage[i]["media-data"] !== 'undefined') {
-			// Artifact is an old Alexandria artifact
-		} else {
-			// Artifact conforms to neither; query LibraryD and return any artifacts.
-			// This helps prevent crashing and should still allow return of artifacts in the case that the oip protocol is updated and this tool is not.
-		}
+		searchOn = '*';
+	}
+
+	if (typeof module !== 'string'){
+		// Since it is not a string, check if they put the callback here.
+		if (typeof module === 'function')
+			callback = module;
+
+		module = 'media';
+	}
+
+	if (typeof callback !== 'function'){
+		// If the callback is not a function cancel the search as we cannot return data recieved.
+		// It is likely that the user is attempting to call it directly.
+		// If they called this method and expected the value to be returned into a variable it will return a blank array.
+		if (searchOn == 'txid')
+			return this.getArtifact(searchTerm);
+		else
+			return [];
+	}
+
+	if (typeof searchTerm !== 'string'){
+		// No search term provided, return an empty array.
+		callback([]);
+		return;
+	}
+
+	// Check to see if it has been at least SEARCH_DELAY ms since the last full query.
+	var tmpTime = new Date().getTime();
+	if (tmpTime - this.lastFullUpdate > this.SEARCH_DELAY){
+		this.queryLibraryD(searchTerm, searchOn, module, callback);
+	} else {
+		// It has not been SEARCH_DELAY ms yet, just search the local db.
+		callback(this.searchArtifactStorage(searchTerm, searchOn, module));
 	}
 }
 
@@ -116,6 +170,7 @@ LDD.prototype.queryLibraryD = function(searchTerm, searchOn, module, callback){
 	if (typeof searchTerm !== 'string'){
 		// No search term provided, return an empty array.
 		callback([]);
+		return;
 	}
 
 
@@ -138,6 +193,7 @@ LDD.prototype.queryLibraryD = function(searchTerm, searchOn, module, callback){
 		json: true
 	};
 
+	var self = this;
 	request(opts, function(err, res, body){
 		if (err){
 			console.log("Recieved a " + " error when attempting to search LibraryD. \nRequestURL: " + requestURL + "\nqueryString: " + queryString + "\nStacktrace: " + err);
@@ -146,8 +202,14 @@ LDD.prototype.queryLibraryD = function(searchTerm, searchOn, module, callback){
 		// Check if there is any data in the body.
 		if (body){
 			// Store the new values we loaded.
-			if (typeof body.response === 'object')
-				this.artifactStorage = mergeArrays(this.artifactStorage, body.response);
+			if (typeof body.response === 'object'){
+				if (searchTerm !== '*'){
+					self.artifactStorage = mergeArrays(self.artifactStorage, body.response);
+				} else if (searchTerm === '*'){
+					self.artifactStorage = body.response;
+					self.lastFullUpdate = new Date().getTime();
+				}
+			}
 
 			callback(body.response);
 			return;
@@ -156,6 +218,49 @@ LDD.prototype.queryLibraryD = function(searchTerm, searchOn, module, callback){
 		// Some error happened, return an empty array.
 		callback([]);
 	});
+}
+
+// Method Name: LDD.searchArtifactStorage
+// Description: Searches the local artifact cache and returns any matches.
+// Paramaters: 
+// 		- searchTerm: The text we are searching for.
+// 		- searchOn: the variable name (txid, publisher, address) or for everything '*' (default '*')
+// 		- module: the module we are searching on, this should be 'media' in almost all cases. It is however an option if wished to be set. (default 'media')
+// Returns: Returns any matches.
+LDD.prototype.searchArtifactStorage = function(searchTerm, searchOn, module){
+	if (typeof searchTerm !== 'string')
+		return [];
+
+	if (typeof searchOn !== 'string')
+		searchOn = '*';
+
+	if (typeof module !== 'string')
+		module = 'media';
+
+	// If the searchOn can be found at the root of the JSON object, then just search the root and do not search recursively.
+	if (searchOn == 'tags' || searchOn == 'timestamp' || searchOn == 'title' || searchOn == 'txid' || searchOn == 'type' || searchOn == 'year' || searchOn == 'publisher'){
+		var matches = [];
+
+		for (var i = 0; i < this.artifactStorage.length; i++) {
+			if (searchArtifact({a: this.artifactStorage[i][searchOn]}, searchTerm))
+				matches.push(this.artifactStorage[i]);
+		}
+
+		return matches;
+	}
+
+	// We need to preform a recursive search.
+	var results = [];
+	for (var i = this.artifactStorage.length - 1; i >= 0; i--) {
+		// If we have more than the max results for a '*' search, then break.
+		if (results.length >= this.MAX_SEARCH_RESULTS)
+			break;
+
+		if (searchArtifact(this.artifactStorage[i], searchTerm))
+			results.push(this.artifactStorage[i]);
+	}
+
+	return results;
 }
 
 // Method Name: mergeArrays
@@ -199,6 +304,48 @@ var mergeArrays = function(arrayOne, arrayTwo){
 	}
 
 	return newArray;
+}
+
+// Method Name: searchArtifact
+// Description: Searches a single artifact for the searchTerm
+// Paramaters: 
+// 		- artifact: JSON Artifact Object
+// 		- searchTerm: String of search term
+// Returns: true if the artifact contains the searchTerm in any of its children, false if it does not at all.
+var searchArtifact = function(artifact, searchTerm){
+	for (key in artifact){
+		var item = artifact[key];
+
+		if (item === "9d4146033293bd7a28226a90faf0814eff730421d3067d9b9bd5bbcc5e75da9a")
+			console.log("OMG");
+
+		if (typeof item !== 'object') {
+			if (typeof item === 'string'){
+				if (item === searchTerm){
+					return true;
+				} else if (item.toLowerCase() === searchTerm.toLowerCase()){
+					return true;
+				} else if (item.indexOf(searchTerm) !== -1){
+					return true;
+				} else if (item.toLowerCase().indexOf(searchTerm.toLowerCase()) !== -1){
+					return true;
+				} else if (item.toLowerCase().includes(searchTerm.toLowerCase())){
+					return true;
+				}
+			} else if (item.toString().toLowerCase() === searchTerm.toLowerCase()){
+				return true;
+			}
+		} else {
+			var subresult = searchArtifact(item, searchTerm);
+
+			// If the subresult returns true then it was a match.
+			if (subresult)
+				return true;
+		}
+	}
+
+	// If the entire search fails, return false.
+	return false;
 }
 
 // Expose LDD and all methods.
