@@ -16,5 +16,8 @@
     "FLO"
   ],
   "author": "OstlerDev",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "request": "^2.79.0"
+  }
 }
