@@ -1,0 +1,20 @@
+{
+  "name": "libraryd-data",
+  "version": "1.0.0",
+  "description": "Easily search and access Artifact JSON from LibraryD inside Node.JS and Browsers.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "Alexandria",
+    "DLOA",
+    "LibraryD",
+    "OIP",
+    "Artifact",
+    "Florincoin",
+    "FLO"
+  ],
+  "author": "OstlerDev",
+  "license": "MIT"
+}
