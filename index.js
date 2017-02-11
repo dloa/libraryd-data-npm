@@ -29,6 +29,8 @@ var LDD = function () {
 		var secureStr = this.dataHostnameSecure ? 'https' : 'http';
 		return secureStr + '://' + this.dataHostname + this.dataSlug;
 	}
+
+	this.loadAllFromLibraryD();
 };
 
 // Method Name: LDD.getArtifact
@@ -218,6 +220,14 @@ LDD.prototype.queryLibraryD = function(searchTerm, searchOn, module, callback){
 		// Some error happened, return an empty array.
 		callback([]);
 	});
+}
+
+// Method Name: LDD.loadAllFromLibraryD
+// Description: Loads all artifacts from libraryd into the local storage.
+// Paramaters: None
+// Returns: None
+LDD.prototype.loadAllFromLibraryD = function(){
+	this.queryLibraryD('', function(data){console.log("Loaded " + data.length + " artifacts from LibraryD")});
 }
 
 // Method Name: LDD.searchArtifactStorage
