@@ -203,9 +203,9 @@ LDD.prototype.queryLibraryD = function(searchTerm, searchOn, module, callback){
 		if (body){
 			// Store the new values we loaded.
 			if (typeof body.response === 'object'){
-				if (searchTerm !== '*'){
+				if (searchTerm !== ''){
 					self.artifactStorage = mergeArrays(self.artifactStorage, body.response);
-				} else if (searchTerm === '*'){
+				} else if (searchTerm === ''){
 					self.artifactStorage = body.response;
 					self.lastFullUpdate = new Date().getTime();
 				}
@@ -315,9 +315,6 @@ var mergeArrays = function(arrayOne, arrayTwo){
 var searchArtifact = function(artifact, searchTerm){
 	for (key in artifact){
 		var item = artifact[key];
-
-		if (item === "9d4146033293bd7a28226a90faf0814eff730421d3067d9b9bd5bbcc5e75da9a")
-			console.log("OMG");
 
 		if (typeof item !== 'object') {
 			if (typeof item === 'string'){

@@ -8,7 +8,7 @@ LDD.getArtifact('fb7560ad53d4299b55250583f2f5c7975cd6e0c3c5b587cb49d7eee1799b58c
 });*/
 
 console.log(new Date().getTime());
-LDD.search('test', function(data){
+LDD.search('', function(data){
 	console.log(data.length);
 	console.log(new Date().getTime());
 
